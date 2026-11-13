@@ -1,0 +1,82 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: MediWaste student MVP - API Lambda and scheduled expiry scan
+
+Parameters:
+  MongoUri:
+    Type: String
+    NoEcho: true
+    Description: MongoDB Atlas connection URI for MediWasteDB
+  JwtSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+    Description: Long random JWT signing secret
+  FrontendOrigin:
+    Type: String
+    Default: '*'
+    Description: Set to your CloudFront website URL for deployment
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 30
+    MemorySize: 512
+    Environment:
+      Variables:
+        MONGODB_URI: !Ref MongoUri
+        JWT_SECRET: !Ref JwtSecret
+        JWT_EXPIRES_IN: 1d
+        FRONTEND_ORIGIN: !Ref FrontendOrigin
+        EXPIRY_WARNING_DAYS: '30'
+
+Resources:
+  MediWasteApi:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: lambda.api
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        ProxyApi:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+        RootApi:
+          Type: Api
+          Properties:
+            Path: /
+            Method: ANY
+
+  MediWasteExpiryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: lambda.expiry
+      Timeout: 120
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt MediWasteAlerts.TopicName
+      Events:
+        DailyExpiryScan:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 3 * * ? *)
+            Description: Daily expiry scan at 03:00 UTC
+            Enabled: true
+
+  MediWasteAlerts:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: mediwaste-expiry-alerts
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint
+    Value: !Sub https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/
+  AlertsTopicArn:
+    Description: SNS topic for future notification integration
+    Value: !Ref MediWasteAlerts
