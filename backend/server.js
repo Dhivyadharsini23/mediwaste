@@ -13,15 +13,16 @@ const alertRoutes = require("./src/routes/alerts");
 
 const app = express();
 
-// Middleware
+// CORS Configuration
 app.use(
   cors({
-    origin: process.env.FRONTEND_ORIGIN
-      ? process.env.FRONTEND_ORIGIN.split(",")
-      : true,
+    origin: "https://mediwaste.vercel.app",
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
+// Middleware
 app.use(express.json({ limit: "1mb" }));
 
 // Health check
